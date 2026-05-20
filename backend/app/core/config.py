@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     secret_key: str = Field(..., min_length=32)
     log_level: str = "INFO"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 30
 
     # Server
     backend_host: str = "0.0.0.0"

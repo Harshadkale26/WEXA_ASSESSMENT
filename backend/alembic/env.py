@@ -8,9 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import settings
 from app.db.base import Base
-
-# Import models here so Alembic can detect metadata changes.
-# from app.models import *  # noqa: F401, F403
+from app import models  # noqa: F401
 
 config = context.config
 

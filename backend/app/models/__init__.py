@@ -1,4 +1,5 @@
 """SQLAlchemy ORM models."""
 
-# Import models here for Alembic autogenerate discovery:
-# from app.models.example import Example  # noqa: F401
+from app.models.auth import Organization, RefreshToken, Role, User
+
+__all__ = ["Organization", "RefreshToken", "Role", "User"]
