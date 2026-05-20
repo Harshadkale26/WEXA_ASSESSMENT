@@ -68,6 +68,19 @@ Clean architecture layers under `backend/app/`:
 
 Rate limits and batch limits are configurable via `INGESTION_*` environment variables.
 
+## Celery (Redis broker)
+
+| Service | Command |
+|---------|---------|
+| Worker | `celery -A app.celery_app.celery_app worker -Q analytics.default,analytics.ingestion,analytics.priority` |
+| Beat | `celery -A app.celery_app.celery_app beat` |
+
+Health endpoints:
+- `GET /api/v1/health` — includes Celery worker ping status
+- `GET /api/v1/health/celery` — registered tasks + worker detail
+
+Ingestion events are processed by `events.process_event` on queue `analytics.ingestion` with exponential backoff retries.
+
 ## Migrations
 
 ```bash

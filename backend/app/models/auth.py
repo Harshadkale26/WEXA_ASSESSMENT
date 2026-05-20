@@ -12,6 +12,7 @@ from app.db.base import Base
 from app.models.base import TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
+    from app.models.dashboard import Dashboard, Widget
     from app.models.ingestion import Event, OrganizationApiKey
 
 
@@ -53,6 +54,18 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     events: Mapped[list["Event"]] = relationship(
         "Event",
+        back_populates="organization",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+    )
+    dashboards: Mapped[list["Dashboard"]] = relationship(
+        "Dashboard",
+        back_populates="organization",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+    )
+    widgets: Mapped[list["Widget"]] = relationship(
+        "Widget",
         back_populates="organization",
         lazy="selectin",
         cascade="all, delete-orphan",

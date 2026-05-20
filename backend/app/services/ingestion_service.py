@@ -12,6 +12,7 @@ from fastapi import HTTPException, UploadFile, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.celery_app.config import ingestion_queue_name
 from app.celery_app.tasks.events import process_event_task
 from app.core.config import settings
 from app.models.ingestion import Event, EventProcessingStatus
@@ -61,7 +62,10 @@ class IngestionService:
         )
 
     async def _after_persist_enqueue(self, event: Event) -> None:
-        result = process_event_task.apply_async(args=[str(event.id)], task_id=None)
+        result = process_event_task.apply_async(
+            args=[str(event.id)],
+            queue=ingestion_queue_name(),
+        )
         event.celery_task_id = result.id
         await self.session.flush()
 

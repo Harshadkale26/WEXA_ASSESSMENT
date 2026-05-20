@@ -1,9 +1,11 @@
 """SQLAlchemy ORM models."""
 
 from app.models.auth import Organization, RefreshToken, Role, User
+from app.models.dashboard import Dashboard, Widget, WidgetType
 from app.models.ingestion import Event, EventProcessingStatus, OrganizationApiKey
 
 __all__ = [
+    "Dashboard",
     "Event",
     "EventProcessingStatus",
     "Organization",
@@ -11,4 +13,6 @@ __all__ = [
     "RefreshToken",
     "Role",
     "User",
+    "Widget",
+    "WidgetType",
 ]

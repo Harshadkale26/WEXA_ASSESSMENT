@@ -42,6 +42,18 @@ class Settings(BaseSettings):
     # Celery
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
+    celery_visibility_timeout: int = 3600
+    celery_result_expires: int = 86_400
+    celery_worker_concurrency: int = 4
+    celery_worker_prefetch_multiplier: int = 1
+    celery_worker_max_tasks_per_child: int = 200
+    celery_task_default_max_retries: int = 5
+    celery_task_default_retry_delay: int = 60
+    celery_task_retry_backoff_max: int = 900
+    celery_beat_enabled: bool = True
+    celery_beat_health_interval_seconds: int = 300
+    celery_beat_retry_failed_minutes: int = 15
+    celery_failed_event_retry_batch_size: int = 100
 
     # Event ingestion
     ingestion_rate_limit_per_minute: int = 10_000

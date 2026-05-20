@@ -58,7 +58,14 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: analytics-celery-worker
-    command: celery -A app.celery_app.celery worker --loglevel=info
+    command: >
+      celery -A app.celery_app.celery_app worker
+      --loglevel=${CELERY_LOG_LEVEL:-info}
+      --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
+      --hostname=worker@%h
+      -Q analytics.default,analytics.ingestion,analytics.priority
+      --without-gossip
+      --without-mingle
     env_file:
       - .env
     environment:
@@ -74,13 +81,22 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app.celery_app inspect ping -d worker@$$HOSTNAME --timeout=5 2>/dev/null | grep -q pong || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 40s
 
   celery-beat:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: analytics-celery-beat
-    command: celery -A app.celery_app.celery beat --loglevel=info
+    command: >
+      celery -A app.celery_app.celery_app beat
+      --loglevel=${CELERY_LOG_LEVEL:-info}
+      --schedule=/var/lib/celery/celerybeat-schedule
     env_file:
       - .env
     environment:
@@ -91,8 +107,11 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/2
     volumes:
       - ./backend:/app
+      - celery_beat_data:/var/lib/celery
     depends_on:
       redis:
+        condition: service_healthy
+      celery-worker:
         condition: service_healthy
 
   frontend:
@@ -118,3 +137,4 @@ volumes:
   postgres_data:
   redis_data:
   frontend_node_modules:
+  celery_beat_data:
