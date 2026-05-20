@@ -1,20 +1,23 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_v1_router
-from app.core.config import settings
-from app.core.logging import setup_logging
+from app.config import settings
+from app.database import dispose_engine
+from app.exceptions import setup_exception_handlers
+from app.logging import get_logger
+from app.middleware import setup_middleware
 
-logger = setup_logging()
+log = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting %s [%s]", settings.app_name, settings.environment)
+    log.info("lifespan_start", app=settings.app_name, environment=settings.environment)
     yield
-    logger.info("Shutting down %s", settings.app_name)
+    await dispose_engine()
+    log.info("lifespan_stop", app=settings.app_name)
 
 
 def create_app() -> FastAPI:
@@ -26,13 +29,8 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins_list,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    setup_middleware(app)
+    setup_exception_handlers(app)
 
     app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
 
