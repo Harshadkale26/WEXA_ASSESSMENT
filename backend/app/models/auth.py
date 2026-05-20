@@ -3,7 +3,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -17,12 +17,27 @@ class Role(str, enum.Enum):
     VIEWER = "viewer"
 
 
+# PostgreSQL native ENUM — values persisted as lowercase (Role.value).
+ROLE_PG_ENUM = Enum(
+    Role,
+    name="role_enum",
+    native_enum=True,
+    values_callable=lambda obj: [e.value for e in obj],
+)
+
+
 class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "organizations"
+    __table_args__ = (UniqueConstraint("slug", name="uq_organizations_slug"),)
 
     name: Mapped[str] = mapped_column(String(120), nullable=False)
-    slug: Mapped[str] = mapped_column(String(140), unique=True, nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(String(140), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    settings: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        doc="Flexible tenant configuration / feature flags.",
+    )
 
     users: Mapped[list["User"]] = relationship(back_populates="organization", lazy="selectin")
 
@@ -30,7 +45,7 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "users"
     __table_args__ = (
-        UniqueConstraint("organization_id", "email", name="uq_users_org_email"),
+        UniqueConstraint("organization_id", "email", name="uq_users_organization_id_email"),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -43,7 +58,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[Role] = mapped_column(
-        Enum(Role, name="role_enum", native_enum=False),
+        ROLE_PG_ENUM,
         nullable=False,
         default=Role.VIEWER,
     )
@@ -89,4 +104,3 @@ class RefreshToken(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     def mark_used(self) -> None:
         self.last_used_at = datetime.now(UTC)
-

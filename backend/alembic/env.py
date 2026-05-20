@@ -1,10 +1,24 @@
+"""
+Alembic environment — PostgreSQL via async SQLAlchemy (asyncpg).
+
+- Online: asyncio + async_engine_from_config + run_sync(do_run_migrations)
+- Offline: sync URL without +asyncpg (database_url_sync) for DDL SQL generation
+"""
+
 import asyncio
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+# Ensure backend package resolves when running alembic from repo root / container
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent
+if str(_BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_ROOT))
 
 from app.core.config import settings
 from app.db.base import Base
@@ -18,6 +32,13 @@ if config.config_file_name is not None:
 config.set_main_option("sqlalchemy.url", settings.database_url_sync)
 target_metadata = Base.metadata
 
+# Autogenerate / compare behavior for PostgreSQL
+_CONNECT_ARGS = {
+    "compare_type": True,
+    "compare_server_default": True,
+    "render_as_batch": False,
+}
+
 
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
@@ -26,6 +47,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        **_CONNECT_ARGS,
     )
 
     with context.begin_transaction():
@@ -33,7 +55,11 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        **_CONNECT_ARGS,
+    )
 
     with context.begin_transaction():
         context.run_migrations()

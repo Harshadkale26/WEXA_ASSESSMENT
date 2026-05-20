@@ -9,16 +9,20 @@ from app.db.base import Base
 
 
 class TimestampMixin:
+    """Timestamps indexed for tenant queries, ordering, and retention jobs."""
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
+        index=True,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+        index=True,
     )
 
 
