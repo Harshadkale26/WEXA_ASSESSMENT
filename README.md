@@ -56,6 +56,18 @@ Clean architecture layers under `backend/app/`:
 - `db/` — database session and base
 - `celery_app/` — async task workers
 
+## Event ingestion (API key)
+
+1. Run migrations (includes `events` + `organization_api_keys`).
+2. Create an API key (JWT, Admin+): `POST /api/v1/auth/api-keys`
+3. Ingest with header `X-API-Key: <plaintext key>`:
+
+   - `POST /api/v1/ingestion/events` — single event (JSON)
+   - `POST /api/v1/ingestion/events/batch` — batch (JSON)
+   - `POST /api/v1/ingestion/events/csv` — CSV upload (`event_name,event_type,timestamp,source,payload`)
+
+Rate limits and batch limits are configurable via `INGESTION_*` environment variables.
+
 ## Migrations
 
 ```bash

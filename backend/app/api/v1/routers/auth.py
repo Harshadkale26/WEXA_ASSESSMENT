@@ -9,10 +9,11 @@ from app.schemas.auth import (
     InviteUserRequest,
     LoginRequest,
     RefreshTokenRequest,
+    SignupRequest,
     TokenResponse,
     UserResponse,
-    SignupRequest,
 )
+from app.schemas.events import CreateApiKeyRequest, CreateApiKeyResponse
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -53,4 +54,14 @@ async def get_me(
 ) -> UserResponse:
     service = AuthService(session)
     return await service.get_current_user(current_user)
+
+
+@router.post("/api-keys", response_model=CreateApiKeyResponse, status_code=status.HTTP_201_CREATED)
+async def create_api_key(
+    payload: CreateApiKeyRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_minimum_role(Role.ADMIN)),
+) -> CreateApiKeyResponse:
+    service = AuthService(session)
+    return await service.create_api_key(current_user, payload)
 

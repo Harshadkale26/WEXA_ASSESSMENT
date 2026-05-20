@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
 
+    # Event ingestion
+    ingestion_rate_limit_per_minute: int = 10_000
+    ingestion_max_batch_size: int = 500
+    ingestion_csv_max_bytes: int = 10 * 1024 * 1024
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

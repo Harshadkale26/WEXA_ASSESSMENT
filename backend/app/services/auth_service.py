@@ -1,9 +1,11 @@
 from dataclasses import dataclass
+import secrets
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.api_key_hash import hash_api_key
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -13,6 +15,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models.auth import Organization, RefreshToken, Role, User
+from app.repositories.organization_api_key_repository import OrganizationApiKeyRepository
 from app.repositories.organization_repository import OrganizationRepository
 from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.repositories.user_repository import UserRepository
@@ -26,6 +29,7 @@ from app.schemas.auth import (
     TokenResponse,
     UserResponse,
 )
+from app.schemas.events import CreateApiKeyRequest, CreateApiKeyResponse
 
 
 ROLE_HIERARCHY = {
@@ -49,6 +53,7 @@ class AuthService:
         self.org_repo = OrganizationRepository(session)
         self.user_repo = UserRepository(session)
         self.refresh_repo = RefreshTokenRepository(session)
+        self.api_key_repo = OrganizationApiKeyRepository(session)
 
     async def signup(self, payload: SignupRequest) -> AuthResponse:
         org = await self.org_repo.get_by_slug(payload.organization_slug)
@@ -136,6 +141,17 @@ class AuthService:
 
     async def get_current_user(self, user: User) -> UserResponse:
         return UserResponse.model_validate(user)
+
+    async def create_api_key(self, actor: User, payload: CreateApiKeyRequest) -> CreateApiKeyResponse:
+        plaintext = f"wk_live_{secrets.token_urlsafe(32)}"
+        key_prefix = plaintext[:12]
+        row = await self.api_key_repo.create(
+            organization_id=actor.organization_id,
+            name=payload.name.strip(),
+            key_hash=hash_api_key(plaintext),
+            key_prefix=key_prefix,
+        )
+        return CreateApiKeyResponse(id=row.id, api_key=plaintext, key_prefix=key_prefix, name=row.name)
 
     def _decode_expected_token(self, token: str, *, expected_type: str) -> dict:
         try:

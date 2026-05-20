@@ -2,12 +2,17 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.base import TimestampMixin, UUIDPrimaryKeyMixin
+
+if TYPE_CHECKING:
+    from app.models.ingestion import Event, OrganizationApiKey
 
 
 class Role(str, enum.Enum):
@@ -40,6 +45,18 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     users: Mapped[list["User"]] = relationship(back_populates="organization", lazy="selectin")
+    api_keys: Mapped[list["OrganizationApiKey"]] = relationship(
+        "OrganizationApiKey",
+        back_populates="organization",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+    )
+    events: Mapped[list["Event"]] = relationship(
+        "Event",
+        back_populates="organization",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+    )
 
 
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
