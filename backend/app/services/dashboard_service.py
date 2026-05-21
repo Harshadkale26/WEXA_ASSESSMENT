@@ -8,19 +8,75 @@ from app.models.dashboard import WidgetType
 from app.repositories.dashboard_repository import DashboardRepository
 from app.repositories.widget_repository import WidgetRepository
 from app.schemas.dashboard import (
+    AggregationType,
     DashboardCreate,
     DashboardDetailResponse,
     DashboardResponse,
     DashboardUpdate,
+    TimeBucket,
+    TimeRangeConfig,
+    TimeRangePreset,
     WidgetCreate,
     WidgetDataPoint,
     WidgetDataQueryOverride,
     WidgetDataResponse,
     WidgetDataSeries,
+    WidgetLayout,
     WidgetQueryConfig,
     WidgetResponse,
     WidgetUpdate,
 )
+
+DEFAULT_BOOTSTRAP_WIDGETS: list[WidgetCreate] = [
+    WidgetCreate(
+        title="Total events",
+        widget_type=WidgetType.KPI_CARD,
+        query_config=WidgetQueryConfig(
+            metric="*",
+            aggregation=AggregationType.COUNT,
+            time_range=TimeRangeConfig(preset=TimeRangePreset.LAST_7D),
+        ),
+        layout=WidgetLayout(x=0, y=0, w=3, h=2),
+        sort_order=0,
+    ),
+    WidgetCreate(
+        title="Events over time",
+        widget_type=WidgetType.LINE_CHART,
+        query_config=WidgetQueryConfig(
+            metric="*",
+            aggregation=AggregationType.COUNT,
+            group_by="timestamp",
+            time_bucket=TimeBucket.HOUR,
+            time_range=TimeRangeConfig(preset=TimeRangePreset.LAST_7D),
+        ),
+        layout=WidgetLayout(x=3, y=0, w=6, h=3),
+        sort_order=1,
+    ),
+    WidgetCreate(
+        title="By event type",
+        widget_type=WidgetType.BAR_CHART,
+        query_config=WidgetQueryConfig(
+            metric="*",
+            aggregation=AggregationType.COUNT,
+            group_by="event_type",
+            time_range=TimeRangeConfig(preset=TimeRangePreset.LAST_7D),
+        ),
+        layout=WidgetLayout(x=0, y=3, w=6, h=3),
+        sort_order=2,
+    ),
+    WidgetCreate(
+        title="By source",
+        widget_type=WidgetType.PIE_CHART,
+        query_config=WidgetQueryConfig(
+            metric="*",
+            aggregation=AggregationType.COUNT,
+            group_by="source",
+            time_range=TimeRangeConfig(preset=TimeRangePreset.LAST_7D),
+        ),
+        layout=WidgetLayout(x=6, y=3, w=6, h=3),
+        sort_order=3,
+    ),
+]
 from app.services.analytics_query_builder import AnalyticsQueryBuilder, resolve_time_range
 from app.services.base import BaseService
 
@@ -52,6 +108,34 @@ class DashboardService(BaseService):
             created_by_id=user.id,
         )
         return DashboardResponse.model_validate(row)
+
+    async def bootstrap_default(self, user: User) -> DashboardDetailResponse:
+        """
+        Ensure the org has a default dashboard with sample widgets (idempotent).
+        Creates dashboard and/or widgets if missing.
+        """
+        rows = await self.dashboards.list_for_org(user.organization_id)
+        dashboard = next((d for d in rows if d.is_default), None)
+        if dashboard is None and rows:
+            dashboard = rows[0]
+        if dashboard is None:
+            dashboard = await self.dashboards.create(
+                organization_id=user.organization_id,
+                name="Overview",
+                description="Auto-generated analytics overview",
+                is_default=True,
+                created_by_id=user.id,
+            )
+
+        widgets = await self.widgets.list_for_dashboard(
+            dashboard.id,
+            organization_id=user.organization_id,
+        )
+        if not widgets:
+            for spec in DEFAULT_BOOTSTRAP_WIDGETS:
+                await self.create_widget(user, dashboard.id, spec)
+
+        return await self.get_dashboard(user, dashboard.id)
 
     async def update_dashboard(
         self,

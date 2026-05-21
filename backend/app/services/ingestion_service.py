@@ -70,7 +70,12 @@ class IngestionService:
         await self.session.flush()
 
     async def ingest_single(self, data: IngestionEventIn) -> EventAcceptedOut:
-        await enforce_ingestion_rate_limit(self.redis, organization_id=self.organization_id)
+        await enforce_ingestion_rate_limit(
+            self.redis,
+            organization_id=self.organization_id,
+            api_key_id=self.api_key_row.id,
+            event_count=1,
+        )
         event = self._build_event(data)
         await self.events.add(event)
         await self._after_persist_enqueue(event)
@@ -84,7 +89,12 @@ class IngestionService:
                 detail=f"Batch exceeds max size of {settings.ingestion_max_batch_size}",
             )
 
-        await self._enforce_bulk_rate_limit(len(data.events))
+        await enforce_ingestion_rate_limit(
+            self.redis,
+            organization_id=self.organization_id,
+            api_key_id=self.api_key_row.id,
+            event_count=len(data.events),
+        )
 
         accepted: list[Event] = []
         for item in data.events:
@@ -153,7 +163,12 @@ class IngestionService:
                 detail=f"CSV row count exceeds max batch size {settings.ingestion_max_batch_size}",
             )
 
-        await self._enforce_bulk_rate_limit(len(rows))
+        await enforce_ingestion_rate_limit(
+            self.redis,
+            organization_id=self.organization_id,
+            api_key_id=self.api_key_row.id,
+            event_count=len(rows),
+        )
 
         events = [self._build_event(r) for r in rows]
         await self.events.add_many(events)
@@ -167,21 +182,6 @@ class IngestionService:
             enqueued_tasks=len(events),
         )
 
-    async def _enforce_bulk_rate_limit(self, n: int) -> None:
-        limit = settings.ingestion_rate_limit_per_minute
-        if limit <= 0 or n <= 0:
-            return
-
-        minute_bucket = datetime.now(UTC).strftime("%Y%m%d%H%M")
-        key = f"ingest:rl:{self.organization_id}:{minute_bucket}"
-
-        new_val = await self.redis.incrby(key, n)
-        if new_val == n:
-            await self.redis.expire(key, 120)
-
-        if new_val > limit:
-            await self.redis.incrby(key, -n)
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Organization ingestion rate limit exceeded. Retry after one minute.",
-            )
+    async def ingest_webhook_batch(self, data: IngestionBatchIn) -> BatchIngestionResponse:
+        """Shared path for webhook payloads (single or multiple events)."""
+        return await self.ingest_batch(data)

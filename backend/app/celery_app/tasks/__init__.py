@@ -1,1 +1,1 @@
-"""Celery task modules — discovered automatically via celery_app.autodiscover_tasks."""
+"""Celery task modules (events, health) — loaded via celery_app.conf.imports."""

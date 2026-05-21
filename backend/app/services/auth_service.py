@@ -15,6 +15,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models.auth import Organization, RefreshToken, Role, User
+from app.models.ingestion import OrganizationApiKey
 from app.repositories.organization_api_key_repository import OrganizationApiKeyRepository
 from app.repositories.organization_repository import OrganizationRepository
 from app.repositories.refresh_token_repository import RefreshTokenRepository
@@ -29,7 +30,7 @@ from app.schemas.auth import (
     TokenResponse,
     UserResponse,
 )
-from app.schemas.events import CreateApiKeyRequest, CreateApiKeyResponse
+from app.schemas.events import ApiKeyListItem, CreateApiKeyRequest, CreateApiKeyResponse
 
 
 ROLE_HIERARCHY = {
@@ -142,16 +143,88 @@ class AuthService:
     async def get_current_user(self, user: User) -> UserResponse:
         return UserResponse.model_validate(user)
 
+    async def list_api_keys(self, actor: User) -> list[ApiKeyListItem]:
+        rows = await self.api_key_repo.list_for_org(actor.organization_id)
+        return [
+            ApiKeyListItem(
+                id=r.id,
+                name=r.name,
+                key_prefix=r.key_prefix,
+                is_active=r.is_active,
+                last_used_at=r.last_used_at,
+                created_at=r.created_at,
+                has_webhook_signing_secret=bool(r.webhook_signing_secret),
+            )
+            for r in rows
+        ]
+
     async def create_api_key(self, actor: User, payload: CreateApiKeyRequest) -> CreateApiKeyResponse:
-        plaintext = f"wk_live_{secrets.token_urlsafe(32)}"
-        key_prefix = plaintext[:12]
-        row = await self.api_key_repo.create(
+        plaintext, row, webhook_secret = await self._generate_api_key_row(
             organization_id=actor.organization_id,
             name=payload.name.strip(),
+        )
+        return CreateApiKeyResponse(
+            id=row.id,
+            api_key=plaintext,
+            key_prefix=row.key_prefix,
+            name=row.name,
+            webhook_signing_secret=webhook_secret,
+        )
+
+    async def revoke_api_key(self, actor: User, key_id: UUID) -> ApiKeyListItem:
+        row = await self._get_api_key_or_404(key_id, actor.organization_id)
+        if not row.is_active:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="API key already revoked")
+        revoked = await self.api_key_repo.revoke(row)
+        return ApiKeyListItem(
+            id=revoked.id,
+            name=revoked.name,
+            key_prefix=revoked.key_prefix,
+            is_active=revoked.is_active,
+            last_used_at=revoked.last_used_at,
+            created_at=revoked.created_at,
+            has_webhook_signing_secret=bool(revoked.webhook_signing_secret),
+        )
+
+    async def rotate_api_key(self, actor: User, key_id: UUID) -> CreateApiKeyResponse:
+        row = await self._get_api_key_or_404(key_id, actor.organization_id)
+        if row.is_active:
+            await self.api_key_repo.revoke(row)
+        plaintext, new_row, webhook_secret = await self._generate_api_key_row(
+            organization_id=actor.organization_id,
+            name=f"{row.name} (rotated)",
+        )
+        return CreateApiKeyResponse(
+            id=new_row.id,
+            api_key=plaintext,
+            key_prefix=new_row.key_prefix,
+            name=new_row.name,
+            webhook_signing_secret=webhook_secret,
+        )
+
+    async def _generate_api_key_row(
+        self,
+        *,
+        organization_id: UUID,
+        name: str,
+    ) -> tuple[str, OrganizationApiKey, str]:
+        plaintext = f"wk_live_{secrets.token_urlsafe(32)}"
+        key_prefix = plaintext[:12]
+        webhook_secret = secrets.token_urlsafe(24)
+        row = await self.api_key_repo.create(
+            organization_id=organization_id,
+            name=name,
             key_hash=hash_api_key(plaintext),
             key_prefix=key_prefix,
+            webhook_signing_secret=webhook_secret,
         )
-        return CreateApiKeyResponse(id=row.id, api_key=plaintext, key_prefix=key_prefix, name=row.name)
+        return plaintext, row, webhook_secret
+
+    async def _get_api_key_or_404(self, key_id: UUID, organization_id: UUID):
+        row = await self.api_key_repo.get_by_id(key_id, organization_id=organization_id)
+        if not row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
+        return row
 
     def _decode_expected_token(self, token: str, *, expected_type: str) -> dict:
         try:

@@ -57,8 +57,10 @@ class Settings(BaseSettings):
 
     # Event ingestion
     ingestion_rate_limit_per_minute: int = 10_000
+    ingestion_rate_limit_per_key_per_minute: int = 2_000
     ingestion_max_batch_size: int = 500
     ingestion_csv_max_bytes: int = 10 * 1024 * 1024
+    ingestion_webhook_signature_required: bool = False
 
     @property
     def cors_origins_list(self) -> list[str]:

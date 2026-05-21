@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.celery_app.async_runner import run_async
 from app.celery_app.celery_app import celery_app
 from app.celery_app.config import ingestion_queue_name
 from app.core.config import settings
-from app.database import async_session_factory
 from app.logging import get_logger
 from app.models.ingestion import Event, EventProcessingStatus
 from app.services.event_processing_service import process_event_by_id
@@ -34,16 +34,15 @@ def process_event_task(self, event_id: str) -> str:
     Retries with exponential backoff on transient DB / processing errors.
     """
 
-    async def _run() -> None:
-        async with async_session_factory() as session:
-            await process_event_by_id(
-                session,
-                UUID(event_id),
-                celery_task_id=self.request.id,
-            )
+    async def _run(session: AsyncSession) -> None:
+        await process_event_by_id(
+            session,
+            UUID(event_id),
+            celery_task_id=self.request.id,
+        )
 
     try:
-        asyncio.run(_run())
+        run_async(_run)
     except Exception as exc:
         log.exception("event_processing_failed", event_id=event_id, error=str(exc))
         raise
@@ -63,23 +62,22 @@ def retry_failed_events(self, batch_size: int | None = None) -> dict:
     """
     limit = batch_size or settings.celery_failed_event_retry_batch_size
 
-    async def _fetch_failed_ids() -> list[str]:
-        async with async_session_factory() as session:
-            stmt = (
-                select(Event.id)
-                .where(
-                    Event.processing_status == EventProcessingStatus.FAILED,
-                    Event.processing_attempts < settings.celery_task_default_max_retries,
-                )
-                .order_by(Event.updated_at.asc())
-                .limit(limit)
+    async def _fetch_failed_ids(session: AsyncSession) -> list[str]:
+        stmt = (
+            select(Event.id)
+            .where(
+                Event.processing_status == EventProcessingStatus.FAILED,
+                Event.processing_attempts < settings.celery_task_default_max_retries,
             )
-            result = await session.execute(stmt)
-            return [str(row[0]) for row in result.all()]
+            .order_by(Event.updated_at.asc())
+            .limit(limit)
+        )
+        result = await session.execute(stmt)
+        return [str(row[0]) for row in result.all()]
 
-    failed_ids = asyncio.run(_fetch_failed_ids())
-    for event_id in failed_ids:
-        process_event_task.apply_async(args=[event_id], queue=ingestion_queue_name())
+    failed_ids = run_async(_fetch_failed_ids)
+    for eid in failed_ids:
+        process_event_task.apply_async(args=[eid], queue=ingestion_queue_name())
 
     log.info("retry_failed_events_enqueued", count=len(failed_ids))
     return {"requeued": len(failed_ids)}

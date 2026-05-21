@@ -80,7 +80,7 @@ class AnalyticsQueryEngine:
                 group_by=request.group_by,
                 time_range_start=start,
                 time_range_end=end,
-                total_groups=total_groups if built.group_expr else 1,
+                total_groups=total_groups if built.group_expr is not None else 1,
                 page=request.page,
                 page_size=request.page_size,
                 has_more=has_more,
@@ -125,11 +125,18 @@ class AnalyticsQueryEngine:
         ]
 
     def _metric_conditions(self, request: AnalyticsQueryRequest) -> list[ColumnElement]:
-        """Implicit filter: metric shorthand counts matching event_name unless metric_field set."""
+        """
+        Optional filters from metric shorthand.
+
+        When widget config uses metric=event_type for a COUNT of all events, do not
+        filter event_type='event_type'. Only filter when metric is a concrete value
+        (e.g. metric=pageview with metric_field=event_type).
+        """
         if request.metric_field:
             field = request.metric_field
             if field in ("event_name", "event_type", "source"):
-                return [self._resolver.dimension_column(field) == request.metric]
+                if request.metric not in (field, "*") and request.metric:
+                    return [self._resolver.dimension_column(field) == request.metric]
             return []
 
         if request.aggregation == AggregationType.COUNT:

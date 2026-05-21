@@ -39,6 +39,15 @@ async def create_dashboard(
     return await DashboardService(session).create_dashboard(current_user, payload)
 
 
+@router.post("/bootstrap", response_model=DashboardDetailResponse)
+async def bootstrap_default_dashboard(
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_minimum_role(Role.ANALYST)),
+) -> DashboardDetailResponse:
+    """Create default dashboard + KPI/line/bar/pie widgets if the org has none."""
+    return await DashboardService(session).bootstrap_default(current_user)
+
+
 @router.get("/{dashboard_id}", response_model=DashboardDetailResponse)
 async def get_dashboard(
     dashboard_id: UUID,

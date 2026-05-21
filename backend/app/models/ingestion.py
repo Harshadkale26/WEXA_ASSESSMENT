@@ -48,6 +48,11 @@ class OrganizationApiKey(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     key_prefix: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    webhook_signing_secret: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        doc="Server-side secret for X-Webhook-Signature HMAC verification.",
+    )
 
     organization = relationship(
         "Organization",

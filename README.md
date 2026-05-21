@@ -31,10 +31,16 @@ Production-grade monorepo for a real-time analytics SaaS platform.
    cp frontend/.env.example frontend/.env.local
    ```
 
-2. Start all services:
+2. Start all services (migrations run automatically on backend/worker startup):
 
    ```bash
    docker compose up --build
+   ```
+
+   Or apply migrations manually after the stack is up:
+
+   ```bash
+   docker compose exec backend alembic upgrade head
    ```
 
 3. Access:
@@ -58,15 +64,41 @@ Clean architecture layers under `backend/app/`:
 
 ## Event ingestion (API key)
 
-1. Run migrations (includes `events` + `organization_api_keys`).
-2. Create an API key (JWT, Admin+): `POST /api/v1/auth/api-keys`
-3. Ingest with header `X-API-Key: <plaintext key>`:
+1. Run migrations (`docker compose exec backend alembic upgrade head`).
+2. Create an API key (JWT owner/admin, or **Settings** in the UI): `POST /api/v1/auth/api-keys`
+3. Manage keys: `GET /api/v1/auth/api-keys`, `POST .../revoke`, `POST .../rotate`
+4. Ingest with header `X-API-Key: <plaintext key>`:
 
-   - `POST /api/v1/ingestion/events` — single event (JSON)
-   - `POST /api/v1/ingestion/events/batch` — batch (JSON)
-   - `POST /api/v1/ingestion/events/csv` — CSV upload (`event_name,event_type,timestamp,source,payload`)
+   | Endpoint | Source type |
+   |----------|-------------|
+   | `POST /api/v1/ingestion/events` | Single JSON event |
+   | `POST /api/v1/ingestion/events/batch` | Batch JSON |
+   | `POST /api/v1/ingestion/events/csv` | CSV upload |
+   | `POST /api/v1/ingestion/webhooks/events` | Webhook receiver (optional `X-Webhook-Signature`) |
 
-Rate limits and batch limits are configurable via `INGESTION_*` environment variables.
+- **Validation:** Pydantic models (`IngestionEventIn`, `WebhookIngestionPayload`, …)
+- **Processing:** Celery task `events.process_event` → normalization → `normalized_payload` in PostgreSQL (indexed by org + timestamp)
+- **Rate limits:** per organization (`INGESTION_RATE_LIMIT_PER_MINUTE`) and per API key (`INGESTION_RATE_LIMIT_PER_KEY_PER_MINUTE`)
+- **Webhooks:** HMAC-SHA256 of raw body with signing secret returned on key create/rotate (`INGESTION_WEBHOOK_SIGNATURE_REQUIRED=true` to enforce)
+
+## Frontend (Next.js 14)
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Stack: App Router, TypeScript, Tailwind, Zustand (auth), TanStack Query, Axios.
+
+| Path | Description |
+|------|-------------|
+| `/login`, `/signup` | Auth (public) |
+| `/dashboard` | Overview (protected) |
+| `/analytics`, `/dashboards`, `/ingestion`, `/settings` | App sections |
+
+Protected routes use middleware (`access_token` cookie) + client `AuthGuard`.
 
 ## Celery (Redis broker)
 

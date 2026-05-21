@@ -30,7 +30,10 @@ celery_app.Task = BaseTask
 celery_app.conf.update(build_celery_config())
 celery_app.conf.beat_schedule = build_beat_schedule()
 
-# Auto-discover tasks in app.celery_app.tasks package
-celery_app.autodiscover_tasks(["app.celery_app.tasks"])
+# Register task modules after celery_app is fully initialized (avoids circular imports)
+celery_app.conf.imports = (
+    "app.celery_app.tasks.events",
+    "app.celery_app.tasks.health",
+)
 
 __all__ = ["celery_app"]

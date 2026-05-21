@@ -55,7 +55,11 @@ class AnalyticsService(BaseService):
         if config.metric.startswith("payload."):
             metric_field = config.metric
         elif config.metric in ("event_name", "event_type", "source"):
-            metric_field = config.metric
+            # COUNT + dimension name means "all events" (or group on that column), not filter=value
+            if config.aggregation != WidgetAgg.COUNT:
+                metric_field = config.metric
+            elif config.group_by and config.group_by not in ("timestamp",):
+                metric_field = config.metric
 
         from app.schemas.analytics import AggregationType, AnalyticsFilter, FilterOperator
 

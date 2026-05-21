@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +15,7 @@ from app.schemas.auth import (
     TokenResponse,
     UserResponse,
 )
-from app.schemas.events import CreateApiKeyRequest, CreateApiKeyResponse
+from app.schemas.events import ApiKeyListItem, CreateApiKeyRequest, CreateApiKeyResponse
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -56,6 +58,15 @@ async def get_me(
     return await service.get_current_user(current_user)
 
 
+@router.get("/api-keys", response_model=list[ApiKeyListItem])
+async def list_api_keys(
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_minimum_role(Role.ADMIN)),
+) -> list[ApiKeyListItem]:
+    service = AuthService(session)
+    return await service.list_api_keys(current_user)
+
+
 @router.post("/api-keys", response_model=CreateApiKeyResponse, status_code=status.HTTP_201_CREATED)
 async def create_api_key(
     payload: CreateApiKeyRequest,
@@ -64,4 +75,24 @@ async def create_api_key(
 ) -> CreateApiKeyResponse:
     service = AuthService(session)
     return await service.create_api_key(current_user, payload)
+
+
+@router.post("/api-keys/{key_id}/revoke", response_model=ApiKeyListItem)
+async def revoke_api_key(
+    key_id: UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_minimum_role(Role.ADMIN)),
+) -> ApiKeyListItem:
+    service = AuthService(session)
+    return await service.revoke_api_key(current_user, key_id)
+
+
+@router.post("/api-keys/{key_id}/rotate", response_model=CreateApiKeyResponse)
+async def rotate_api_key(
+    key_id: UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_minimum_role(Role.ADMIN)),
+) -> CreateApiKeyResponse:
+    service = AuthService(session)
+    return await service.rotate_api_key(current_user, key_id)
 
