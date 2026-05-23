@@ -24,6 +24,7 @@ async_session_factory = async_sessionmaker(
 
 
 def get_redis_client() -> Redis:
+    print("REDIS_URL",settings.redis_url)
     return Redis.from_url(str(settings.redis_url), decode_responses=True)
 
 
