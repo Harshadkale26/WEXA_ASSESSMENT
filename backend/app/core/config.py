@@ -37,11 +37,11 @@ class Settings(BaseSettings):
     )
 
     # Redis
-    redis_url: RedisDsn = "redis://localhost:6379/0"
+    redis_url: RedisDsn 
 
     # Celery
-    celery_broker_url: str = "redis://localhost:6379/1"
-    celery_result_backend: str = "redis://localhost:6379/2"
+    celery_broker_url: str 
+    celery_result_backend: str 
     celery_visibility_timeout: int = 3600
     celery_result_expires: int = 86_400
     celery_worker_concurrency: int = 4
